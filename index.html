@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>何食べた？ v4 - Logic Apps Link</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FDF6EE;
+  --orange: #F07D3A;
+  --orange-light: #FDECD8;
+  --orange-dark: #C85E20;
+  --green: #5BAD7F;
+  --green-light: #EBF7F1;
+  --text: #2C1A0E;
+  --text-sub: #9B7A62;
+  --text-light: #C8A882;
+  --shadow: 0 2px 16px rgba(200,120,60,0.10);
+  --char-bg: #F9A8C9;
+  --char-btn: #E87AAA;
+  --char-color: #C05080;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); display: flex; justify-content: center; }
+.app { width: 100%; max-width: 480px; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ===== チャット画面スタイル ===== */
+#chat-screen { flex: 1; display: flex; flex-direction: column; height: 100vh; }
+.chat-header { padding: 12px 16px 10px; background: var(--bg); border-bottom: 1px solid rgba(200,140,80,0.12); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.chat-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; background: var(--char-bg); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.chat-header-texts { flex: 1; }
+.chat-name { font-family: 'Zen Maru Gothic', sans-serif; font-size: 15px; font-weight: 700; color: var(--text); }
+.chat-status { font-size: 11px; color: var(--green); margin-top: 1px; }
+.chat-header-right { display: flex; align-items: center; gap: 10px; }
+.chat-time-disp { font-size: 13px; font-weight: 500; color: var(--text); }
+.chat-date { font-size: 10px; color: var(--text-light); }
+.profile-btn { width: 34px; height: 34px; border: none; border-radius: 50%; background: #fff; box-shadow: var(--shadow); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+
+.chat-body { flex: 1; overflow-y: auto; padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 12px; }
+.row-ai { display: flex; align-items: flex-end; gap: 8px; animation: fadeUp 0.3s; }
+.ai-av-sm { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; background: var(--char-bg); }
+.ai-bubble { background: #fff; border-radius: 14px 14px 14px 4px; padding: 10px 13px; max-width: 78%; box-shadow: var(--shadow); font-size: 13.5px; line-height: 1.75; color: var(--text); }
+.ai-time { font-size: 10px; color: var(--text-light); margin-left: 36px; margin-top: 2px; }
+
+.row-user { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; animation: fadeUp 0.3s; }
+.user-bubble { background: var(--char-btn); color: #fff; border-radius: 14px 14px 4px 14px; padding: 10px 13px; max-width: 78%; font-size: 13.5px; }
+.user-time { font-size: 10px; color: var(--text-light); }
+
+.food-confirm-card { background: #fff; border-radius: 14px; padding: 14px 15px; margin-left: 36px; max-width: 90%; box-shadow: var(--shadow); border: 1.5px solid rgba(200,140,80,0.15); }
+.food-row { display: flex; align-items: baseline; gap: 6px; padding: 5px 0; border-bottom: 1px solid rgba(200,140,80,0.08); font-size: 13px; }
+.food-label { font-size: 10.5px; font-weight: 500; color: var(--text-light); min-width: 44px; }
+.confirm-btns { display: flex; gap: 8px; margin-top: 12px; margin-left: 36px; }
+.yes-btn { flex: 1; background: var(--orange); color: #fff; border: none; border-radius: 12px; padding: 11px; font-weight: 700; cursor: pointer; }
+.no-btn { flex: 1; background: #fff; color: var(--text-sub); border: 1.5px solid rgba(200,140,80,0.25); border-radius: 12px; padding: 11px; cursor: pointer; }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-left: 36px; }
+.chip { background: #fff; border: 1.5px solid rgba(200,140,80,0.22); border-radius: 20px; padding: 7px 13px; font-size: 13px; cursor: pointer; }
+.chip.selected { background: var(--orange); color: #fff; border-color: var(--orange-dark); }
+.chip.disabled { pointer-events: none; opacity: 0.5; }
+
+.chat-input-area { background: var(--bg); border-top: 1px solid rgba(200,140,80,0.12); padding: 8px 14px 20px; }
+.input-row { display: flex; align-items: flex-end; gap: 6px; background: #fff; border-radius: 24px; padding: 7px 14px; box-shadow: var(--shadow); border: 1.5px solid rgba(200,140,80,0.14); }
+.msg-input { flex: 1; border: none; outline: none; font-size: 14px; resize: none; max-height: 90px; }
+.send-btn { width: 36px; height: 36px; background: var(--char-btn); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.send-btn svg { width: 16px; height: 16px; fill: white; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* モーダル等 */
+#onboarding-patient-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+.modal-content { background: #fff; border-radius: 20px; padding: 25px; width: 100%; max-width: 350px; text-align: center; }
+.patient-id-input { width: 100%; border: 1px solid #ccc; border-radius: 10px; padding: 12px; margin: 15px 0; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div id="chat-screen">
+    <div class="chat-header">
+      <div class="chat-avatar">🦁</div>
+      <div class="chat-header-texts">
+        <div class="chat-name">応援団長レオ</div>
+        <div class="chat-status">オンライン</div>
+      </div>
+      <div class="chat-header-right">
+        <div class="chat-header-meta">
+          <div class="chat-time-disp" id="header-time">00:00</div>
+          <div class="chat-date" id="header-date">--月--日</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-body" id="chat-body"></div>
+
+    <div class="chat-input-area">
+      <div class="input-row">
+        <textarea class="msg-input" id="msg-input" placeholder="メッセージを入力..." rows="1"></textarea>
+        <button class="send-btn" id="send-btn">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="onboarding-patient-modal">
+  <div class="modal-content">
+    <h3>診察券番号を入力</h3>
+    <input type="text" id="patient-id-input" class="patient-id-input" placeholder="例: 123456">
+    <button class="yes-btn" onclick="savePatientId()">はじめる</button>
+  </div>
+</div>
+
+<script>
+// ★ Logic Apps の「HTTP POST の URL」をここに貼り付けてください
+const LOGIC_APP_URL = "https://prod-22.japanwest.logic.azure.com:443/workflows/143e1fcd09e844908b82ccb7da4e224a/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=FF7W9sTKjDxUgcp7EaBLvrdJx8vg3du87W1ZoKOPpOw";
+
+let currentFoodData = {};
+
+// --- 絵文字エスケープ関数 ---
+function escapeEmojisRecursive(obj) {
+  if (typeof obj === 'string') {
+    return obj.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, (match) => {
+      return "\\u" + match.charCodeAt(0).toString(16).toUpperCase() + "\\u" + match.charCodeAt(1).toString(16).toUpperCase();
+    });
+  } else if (Array.isArray(obj)) {
+    return obj.map(escapeEmojisRecursive);
+  } else if (obj !== null && typeof obj === 'object') {
+    const newObj = {};
+    for (const key in obj) {
+      newObj[key] = escapeEmojisRecursive(obj[key]);
+    }
+    return newObj;
+  }
+  return obj;
+}
+
+// --- 初期化 ---
+function savePatientId() {
+  const id = document.getElementById('patient-id-input').value.trim();
+  if (!id) return;
+  localStorage.setItem('patient_id', id);
+  document.getElementById('onboarding-patient-modal').style.display = 'none';
+  addAiMsg("準備完了！今日何食べたか教えてね！🍎");
+}
+
+function updateHeader() {
+  const d = new Date();
+  document.getElementById('header-time').textContent = d.getHours().toString().padStart(2,'0') + ":" + d.getMinutes().toString().padStart(2,'0');
+  document.getElementById('header-date').textContent = (d.getMonth()+1) + "月" + d.getDate() + "日";
+}
+setInterval(updateHeader, 1000);
+updateHeader();
+
+// --- チャット基本機能 ---
+function addAiMsg(text) {
+  const chat = document.getElementById('chat-body');
+  chat.insertAdjacentHTML('beforeend', `
+    <div class="row-ai">
+      <div class="ai-av-sm">🦁</div>
+      <div class="ai-bubble">${text}</div>
+    </div>
+    <div class="ai-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+  `);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function addUserMsg(text) {
+  const chat = document.getElementById('chat-body');
+  chat.insertAdjacentHTML('beforeend', `
+    <div class="row-user">
+      <div class="user-bubble">${text}</div>
+      <div class="user-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+    </div>
+  `);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// --- 送信処理 ---
+document.getElementById('send-btn').onclick = () => {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text) return;
+  addUserMsg(text);
+  input.value = '';
+  
+  // 擬似解析ステップ
+  setTimeout(() => {
+    currentFoodData = {
+      food_name: text,
+      amount: "1人前",
+      eaten_at: new Date().toISOString()
+    };
+    askConfirm();
+  }, 800);
+};
+
+function askConfirm() {
+  addAiMsg("これであってる？");
+  const chat = document.getElementById('chat-body');
+  chat.insertAdjacentHTML('beforeend', `
+    <div class="food-confirm-card">
+      <div class="food-row"><span class="food-label">内容</span><span>${currentFoodData.food_name}</span></div>
+      <div class="food-row"><span class="food-label">分量</span><span>${currentFoodData.amount}</span></div>
+    </div>
+    <div class="confirm-btns" id="c-btns">
+      <button class="yes-btn" onclick="confirmOk()">はい</button>
+      <button class="no-btn" onclick="location.reload()">やり直し</button>
+    </div>
+  `);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function confirmOk() {
+  document.getElementById('c-btns').remove();
+  addAiMsg("今の気分は？");
+  const chat = document.getElementById('chat-body');
+  chat.insertAdjacentHTML('beforeend', `
+    <div class="chip-row" id="chips">
+      <button class="chip" onclick="finalize('お腹が空いた', 'External_eating', this)">お腹が空いた😋</button>
+      <button class="chip" onclick="finalize('イライラした', 'Emotional_eating', this)">イライラした💢</button>
+      <button class="chip" onclick="finalize('なんとなく', 'Normative_eating', this)">なんとなく☁️</button>
+    </div>
+  `);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// --- Logic Apps への POST 送信 ---
+async function finalize(label, type, btn) {
+  btn.classList.add('selected');
+  document.querySelectorAll('.chip').forEach(c => c.classList.add('disabled'));
+
+  currentFoodData.emotion_tag = label;
+  currentFoodData.debq_type = type;
+  currentFoodData.patient_id = localStorage.getItem('patient_id') || "0000";
+
+  // 1. 絵文字エスケープ処理を適用
+  const escapedData = escapeEmojisRecursive(currentFoodData);
+
+  // 2. Logic Apps へ送信
+  try {
+    const response = await fetch(LOGIC_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(escapedData)
+    });
+
+    if (response.ok) {
+      addAiMsg("Logic Apps に送信完了！記録したよ✨");
+    } else {
+      addAiMsg("送信に失敗しちゃったみたい...");
+    }
+  } catch (err) {
+    console.error(err);
+    addAiMsg("エラーが発生したよ。URLが正しいか確認してね。");
+  }
+}
+</script>
+</body>
+</html>
