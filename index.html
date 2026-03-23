@@ -695,9 +695,9 @@ const QUESTIONS = [
 const PLACES = ['自宅', '職場', '外食', 'その他'];
 
 // ===== API設定 =====
-// Vercel環境ではAPIキーはサーバー側（api/chat.js）で管理
-// フロントからは /api/chat を呼ぶだけ
+
 const API_ENDPOINT = 'https://prod-22.japanwest.logic.azure.com:443/workflows/143e1fcd09e844908b82ccb7da4e224a/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=FF7W9sTKjDxUgcp7EaBLvrdJx8vg3du87W1ZoKOPpOw';
+const SAVE_ENDPOINT = 'https://prod-61.japaneast.logic.azure.com:443/workflows/4fa5f6f22d374687a3d300b2e7f61bb1/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=_y_w_7X22nuwfSZBNJClzJ_ptSKs-FblWIfdj3WAKGk'; // DB保存用 Logic Apps エンドポイント
 const PATIENT_ID_STORAGE_KEY = 'patient_id';
 const REGISTERED_AT_STORAGE_KEY = 'registered_at';
 const BRONZE_COUNT_STORAGE_KEY = 'bronze_count';
@@ -854,40 +854,22 @@ function resizeImage(dataUrl, maxWidth) {
 
 // ===== AI呼び出し（食事解析） =====
 const FOOD_PARSE_PROMPT = `あなたは食事記録サポートAIです。
-ユーザーの入力が「食事の記録」かどうかをまず判断し、以下のいずれかのJSON形式のみで返答してください。
+ユーザーの入力が「食事の記録」かどうかをまず判断し、以下のJSON形式のみで返答してください。
 マークダウンや説明文は不要です。JSONのみを返してください。
 
 実際に食べた・飲んだ内容が含まれている場合は type を "food" にしてください。
 雑談・これから食べる予定・何を作ろうか悩んでいる・食事以外の話題は type を "chat" にしてください。
 
-type が "food" の場合、必ず <FOOD_DATA> タグで囲んだJSONを含めて返してください:
-<FOOD_DATA>
+type が "food" の場合:
 {
   "type": "food",
   "confirm_text": "〇〇ですね！内容を確認してください👇（30文字以内）",
-  "foods": [
-    { "name": "食材名（患者の言葉をそのまま）", "group": "主食" },
-    { "name": "食材名", "group": "主菜" },
-    { "name": "食材名", "group": "副菜" },
-    { "name": "食材名", "group": "飲料" },
-    { "name": "食材名", "group": "デザート" }
-  ],
-  "meal_time": null,
-  "meal_type": null,
-  "location": null,
-  "emotion_raw": null,
-  "dietitian_memo": "",
-  "debq_signals": { "emotional": false, "restrained": false, "external": false }
+  "food_staple": "主食。なければ空文字",
+  "food_main": "主菜。なければ空文字",
+  "food_side": "副菜。複数はカンマ区切り。なければ空文字",
+  "food_drink": "ドリンク。なければ空文字",
+  "food_dessert": "デザート・間食。なければ空文字"
 }
-</FOOD_DATA>
-
-groupの値は必ず次のいずれかを使ってください:
-- 主食（ご飯・パン・麺類）
-- 主菜（肉・魚・卵・大豆製品）
-- 副菜（野菜・きのこ・海藻）
-- 飲料（水・お茶・ジュース・アルコール）
-- デザート（菓子・果物・間食）
-- その他
 
 type が "chat" の場合:
 {
@@ -896,7 +878,7 @@ type が "chat" の場合:
 }
 
 食材名は患者の言葉をそのまま使い、勝手に変換しないでください。
-欠食の場合: foods を [{ "name": "なし(欠食)", "group": "主食" }] にしてください。`;
+欠食の場合: food_staple を "なし(欠食)" にして他は空文字。`;
 
 async function processFood(userText, imageBase64) {
   if (flowState !== 'idle') return;
@@ -916,7 +898,6 @@ async function processFood(userText, imageBase64) {
       userContent = userText;
     }
 
-    // Logic Apps へ POST（OpenAI互換形式）
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -926,8 +907,9 @@ async function processFood(userText, imageBase64) {
           { role: 'system', content: FOOD_PARSE_PROMPT },
           { role: 'user', content: userContent }
         ],
-        max_tokens: 600,
-        temperature: 0.2
+        max_tokens: 400,
+        temperature: 0.2,
+        response_format: { type: 'json_object' }
       })
     });
 
@@ -939,41 +921,17 @@ async function processFood(userText, imageBase64) {
     }
 
     const data = await res.json();
-    // Logic Apps は assistantReply フィールドで返す想定
-    const assistantReply = data.assistantReply
-      || data.choices?.[0]?.message?.content
-      || '';
-
-    // <FOOD_DATA>...</FOOD_DATA> を抽出してパース
-    const fdMatch = assistantReply.match(/<FOOD_DATA>([\s\S]*?)<\/FOOD_DATA>/);
-    let food = {};
-    if (fdMatch) {
-      food = JSON.parse(fdMatch[1].trim());
-    } else {
-      // フォールバック: JSON直接パース（chatタイプ等）
-      food = JSON.parse(assistantReply.replace(/```json|```/g, '').trim());
-    }
-
-    if (food.type === 'chat') {
-      addAiBubble((food.reply || '').replace(/\n/g, '<br>'));
-      flowState = 'idle';
-      return;
-    }
-
-    // foods配列からカテゴリ別に集約
-    const foods = food.foods || [];
-    const byGroup = (groups) => foods
-      .filter(f => groups.includes(f.group))
-      .map(f => f.name).join('、') || '';
+    const raw = data.choices?.[0]?.message?.content || '{}';
+    const food = JSON.parse(raw);
 
     currentRecord = {
       session_id: 'sess_' + Date.now(),
       free_text: userText,
-      food_staple:  byGroup(['主食']),
-      food_main:    byGroup(['主菜']),
-      food_side:    byGroup(['副菜', 'その他']),
-      food_drink:   byGroup(['飲料']),
-      food_dessert: byGroup(['デザート']),
+      food_staple:  food.food_staple  || '',
+      food_main:    food.food_main    || '',
+      food_side:    food.food_side    || '',
+      food_drink:   food.food_drink   || '',
+      food_dessert: food.food_dessert || '',
       sent_at: new Date().toISOString(),
     };
 
@@ -1320,6 +1278,30 @@ function saveBronze(rec) {
   const count = parseInt(localStorage.getItem(BRONZE_COUNT_STORAGE_KEY) || '0');
   localStorage.setItem(BRONZE_COUNT_STORAGE_KEY, String(count + 1));
   console.log('[Bronze] 保存:', full);
+
+  // Logic Apps へ DB保存POST（fire-and-forget）
+  const payload = {
+    patient_id:         rec.patient_id         || 'unknown',
+    meal_time:          rec.meal_time           || null,
+    meal_type:          rec.meal_type           || null,
+    place:              rec.place               || null,
+    emotion_tag:        rec.emotion_tag         || null,
+    debq_type_inferred: rec.debq_type_inferred  || null,
+    food_staple:        rec.food_staple         || null,
+    food_main:          rec.food_main           || null,
+    food_side:          rec.food_side           || null,
+    food_drink:         rec.food_drink          || null,
+    food_dessert:       rec.food_dessert        || null,
+    free_text:          rec.free_text           || null
+  };
+  fetch(SAVE_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(r => {
+    if (!r.ok) r.text().then(t => console.warn('[Save] HTTP', r.status, t));
+    else console.log('[Save] DB保存成功');
+  }).catch(e => console.warn('[Save] 通信エラー:', e));
 }
 
 // ===== ヘルパー =====
