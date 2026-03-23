@@ -1166,6 +1166,7 @@ function showEmotionCategoryChips() {
     `<button class="chip" onclick="selectEmotionCategory('😤 気持ちから', '', this)">😤 気持ちから</button>`,
     `<button class="chip" onclick="selectEmotionCategory('👀 目や鼻につられて', '', this)">👀 目や鼻につられて</button>`,
     `<button class="chip" onclick="selectEmotionCategory('🥗 量やカロリーを気にしながら', '', this)">🥗 量やカロリーを気にしながら</button>`,
+    `<button class="chip" onclick="selectEmotionCategory('🎉 楽しく・美味しく', '', this)">🎉 楽しく・美味しく</button>`,
     `<button class="chip" onclick="selectEmotionCategory('🤷 なんとなく', '未分類', this)">🤷 なんとなく</button>`
   ].join('');
   const chat = document.getElementById('chat-body');
@@ -1188,7 +1189,9 @@ async function selectEmotionCategory(label, debq, btn) {
       ? 'どんな気持ちから食べた？😌'
       : label === '👀 目や鼻につられて'
         ? 'どんなきっかけで食べた？👀'
-        : 'どんなふうに量やカロリーを気にしていた？🥗'
+        :label === '🎉 楽しく・美味しく'
+         ? 'どんな良いことがあった？'
+         : 'どんなふうに量やカロリーを気にしていた？🥗'
   );
   await sleep(300);
   showEmotionDetailChips(label);
@@ -1209,6 +1212,12 @@ function showEmotionDetailChips(categoryLabel) {
           { label: '周りが食べてたから', debq: 'External' },
           { label: '時間だったから', debq: 'External' },
           { label: '残したくなかった', debq: 'External' }
+        ]: categoryLabel === '🎉 楽しく・美味しく'
+      ? [
+          { label: '家族・友人と一緒で', debq: 'Positive_social' },
+          { label: '美味しくて満足した', debq: 'Positive_taste' },
+          { label: '気分が良くて', debq: 'Positive_mood' },
+          { label: 'ご褒美として', debq: 'Positive_reward' }
         ]
       : [
           { label: 'ダイエット中だから少なめにした', debq: 'CR' },
