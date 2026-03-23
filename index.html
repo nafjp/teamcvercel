@@ -1063,10 +1063,12 @@ async function approveFood(approved, btn) {
 }
 
 function showDatetimePicker() {
+  // ✅ JSTで現在時刻を取得
   const now = new Date();
-  // datetime-local の初期値（現在時刻）
+  const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000); // UTC+9
+
   const pad = n => n.toString().padStart(2,'0');
-  const defaultVal = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const defaultVal = `${jstNow.getUTCFullYear()}-${pad(jstNow.getUTCMonth()+1)}-${pad(jstNow.getUTCDate())}T${pad(jstNow.getUTCHours())}:${pad(jstNow.getUTCMinutes())}`;
   const maxVal = defaultVal;
 
   const chat = document.getElementById('chat-body');
