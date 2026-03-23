@@ -1095,8 +1095,14 @@ async function confirmDatetime() {
   const input = document.getElementById('meal-time-input');
   if (!input.value) return;
 
+  // ✅ input.value を必ず現在のDOM値から取得（前回のcurrentRecordは使わない）
   const dt = new Date(input.value);
-  currentRecord.meal_time = input.value;
+  if (isNaN(dt.getTime())) return; // 不正な日時は無視
+
+  const pad = n => n.toString().padStart(2, '0');
+  const isoJst = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}:00+09:00`;
+
+  currentRecord.meal_time = isoJst;
 
   // meal_typeを時刻から推定（選択肢として提示）
   const h = dt.getHours();
