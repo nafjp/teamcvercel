@@ -187,14 +187,23 @@ body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); display: 
   border: 1.5px solid rgba(200,140,80,0.15);
 }
 .datetime-label { font-size: 11px; color: var(--text-sub); margin-bottom: 7px; font-weight: 500; }
+.datetime-input-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .datetime-input {
-  width: 100%; border: 1.5px solid rgba(200,140,80,0.25);
+  flex: 1; border: 1.5px solid rgba(200,140,80,0.25);
   border-radius: 10px; padding: 9px 11px;
   font-size: 14px; font-family: 'Noto Sans JP', sans-serif;
-  color: var(--text); outline: none; margin-bottom: 10px;
+  color: var(--text); outline: none;
   background: var(--bg);
 }
 .datetime-input:focus { border-color: var(--orange); }
+.datetime-cal-btn {
+  width: 42px; height: 42px; flex-shrink: 0;
+  border: 1.5px solid rgba(200,140,80,0.25); border-radius: 10px;
+  background: var(--orange-light); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; transition: background 0.15s;
+}
+.datetime-cal-btn:hover { background: var(--orange); }
 .datetime-confirm-btn {
   width: 100%; background: var(--orange); color: #fff;
   border: none; border-radius: 10px; padding: 10px;
@@ -695,9 +704,8 @@ const QUESTIONS = [
 const PLACES = ['自宅', '職場', '外食', 'その他'];
 
 // ===== API設定 =====
-
 const API_ENDPOINT = 'https://prod-22.japanwest.logic.azure.com:443/workflows/143e1fcd09e844908b82ccb7da4e224a/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=FF7W9sTKjDxUgcp7EaBLvrdJx8vg3du87W1ZoKOPpOw';
-const SAVE_ENDPOINT = 'https://prod-61.japaneast.logic.azure.com:443/workflows/4fa5f6f22d374687a3d300b2e7f61bb1/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=_y_w_7X22nuwfSZBNJClzJ_ptSKs-FblWIfdj3WAKGk'; // DB保存用 Logic Apps エンドポイント
+const SAVE_ENDPOINT = 'https://prod-61.japaneast.logic.azure.com:443/workflows/4fa5f6f22d374687a3d300b2e7f61bb1/triggers/HTTP_Request/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FHTTP_Request%2Frun&sv=1.0&sig=_y_w_7X22nuwfSZBNJClzJ_ptSKs-FblWIfdj3WAKGk';
 const PATIENT_ID_STORAGE_KEY = 'patient_id';
 const REGISTERED_AT_STORAGE_KEY = 'registered_at';
 const BRONZE_COUNT_STORAGE_KEY = 'bronze_count';
@@ -724,7 +732,7 @@ function applySelectedCharacter() {
   document.querySelector('.send-btn').style.background = char.btnColor;
   document.documentElement.style.setProperty('--char-bg', char.avatarBg);
   document.documentElement.style.setProperty('--char-btn', char.btnColor);
- }
+}
 
 // ===== ユーティリティ =====
 function nowStr() {
@@ -746,9 +754,11 @@ function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
 }
 function disableChips(container) {
-  container.querySelectorAll('.chip, .yes-btn, .no-btn, .datetime-confirm-btn').forEach(b => {
+  container.querySelectorAll('.chip, .yes-btn, .no-btn, .datetime-confirm-btn, .datetime-cal-btn').forEach(b => {
     b.style.pointerEvents = 'none';
   });
+  const input = container.querySelector('.datetime-input');
+  if (input) input.disabled = true;
 }
 
 // ===== メッセージ追加 =====
@@ -887,7 +897,6 @@ async function processFood(userText, imageBase64) {
   const tyId = showTyping();
 
   try {
-    // メッセージ構築（テキスト or 画像）
     let userContent;
     if (imageBase64) {
       userContent = [
@@ -935,6 +944,12 @@ async function processFood(userText, imageBase64) {
       sent_at: new Date().toISOString(),
     };
 
+    if (food.type === 'chat') {
+      addAiBubble((food.reply || 'どんな食事をしましたか？😊').replace(/\n/g, '<br>'));
+      flowState = 'idle';
+      return;
+    }
+
     addAiBubble((food.confirm_text || 'お食事ですね！内容を確認してください👇').replace(/\n/g, '<br>'));
     showFoodCard(currentRecord);
     showApprovalButtons();
@@ -946,71 +961,6 @@ async function processFood(userText, imageBase64) {
     scrollBottom();
     flowState = 'idle';
   }
-}
-
-function parseMockFood(text) {
-  // デモ用モック: 患者の入力文字列をそのまま食材に分解する
-  // 実運用ではこの関数ごとGPT-4o APIコールに置き換える
-
-  // 区切り文字で分割（読点・と・や・、・,）
-  const tokens = text
-    .replace(/[、,，]/g, ' ')
-    .replace(/\bと\b|\bや\b|\bと、\b/g, ' ')
-    .split(/\s+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  // 主食キーワード
-  const STAPLE_KW = ['ご飯','白米','玄米','おにぎり','パン','食パン','ロールパン','バゲット',
-    '麺','そうめん','素麺','うどん','そば','ラーメン','パスタ','スパゲッティ','焼きそば','お粥','雑炊','チャーハン'];
-  // 主菜キーワード
-  const MAIN_KW = ['肉','鶏','豚','牛','魚','鮭','さば','さんま','鰯','いわし','まぐろ','えび','蛸','たこ','烏賊','いか',
-    '卵','玉子','たまご','豆腐','納豆','枝豆','チーズ','ハム','ソーセージ','ベーコン','ウィンナー','唐揚げ','から揚げ',
-    '煮付け','焼き魚','刺身','ハンバーグ','カツ','天ぷら','フライ','炒め','煮物'];
-  // 副菜キーワード
-  const SIDE_KW = ['サラダ','味噌汁','スープ','みそ汁','漬物','おひたし','炒め','小松菜','ほうれん草','ブロッコリー',
-    'にんじん','大根','きゅうり','トマト','レタス','わかめ','海藻','きのこ','しめじ','えのき'];
-  // ドリンクキーワード
-  const DRINK_KW = ['水','お茶','緑茶','麦茶','コーヒー','紅茶','ジュース','牛乳','ミルク','コーラ','ビール','酒','ワイン','焼酎'];
-  // デザートキーワード
-  const DESSERT_KW = ['アイス','ケーキ','チョコ','チョコレート','クッキー','ビスケット','せんべい','和菓子','果物','バナナ','りんご','みかん','ヨーグルト','プリン','ゼリー'];
-
-  function matchCategory(token, keywords) {
-    return keywords.some(kw => token.includes(kw));
-  }
-
-  const staples = [], mains = [], sides = [], drinks = [], desserts = [], unknown = [];
-
-  tokens.forEach(tok => {
-    if (matchCategory(tok, STAPLE_KW))       staples.push(tok);
-    else if (matchCategory(tok, DRINK_KW))   drinks.push(tok);
-    else if (matchCategory(tok, DESSERT_KW)) desserts.push(tok);
-    else if (matchCategory(tok, SIDE_KW))    sides.push(tok);
-    else if (matchCategory(tok, MAIN_KW))    mains.push(tok);
-    else if (tok.length >= 2)               unknown.push(tok); // 未分類は主菜扱い
-  });
-
-  // 未分類は主菜に回す
-  mains.push(...unknown);
-
-  const isEmpty = text.includes('食べてない') || text.includes('欠食') || text.includes('抜いた');
-
-  return {
-    food_staple:  isEmpty ? 'なし(欠食)' : staples.join('・') || '',
-    food_main:    mains.join('・') || '',
-    food_side:    sides.join('・') || '',
-    food_drink:   drinks.join('・') || '',
-    food_dessert: desserts.join('・') || '',
-  };
-}
-
-function buildConfirmText(food) {
-  const items = [];
-  if (food.food_staple && food.food_staple !== 'なし(欠食)') items.push(food.food_staple);
-  if (food.food_main) items.push(food.food_main);
-  if (food.food_side) food.food_side.split(',').forEach(s => items.push(s.trim()));
-  const summary = items.slice(0, 3).join('・');
-  return `${summary || 'お食事'}ですね🍽️<br>内容を確認してください👇`;
 }
 
 function showFoodCard(food) {
@@ -1062,47 +1012,78 @@ async function approveFood(approved, btn) {
   }
 }
 
+// =====================================================================
+// ★ バグ修正箇所: ユニークIDを使用してDOM要素の重複を防ぐ
+// ★ カレンダーボタン（📅）を追加
+// =====================================================================
 function showDatetimePicker() {
-  // ✅ JSTで現在時刻を取得
   const now = new Date();
-  const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000); // UTC+9
-
+  // JSTで現在時刻を取得（UTC+9）
+  const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const pad = n => n.toString().padStart(2,'0');
   const defaultVal = `${jstNow.getUTCFullYear()}-${pad(jstNow.getUTCMonth()+1)}-${pad(jstNow.getUTCDate())}T${pad(jstNow.getUTCHours())}:${pad(jstNow.getUTCMinutes())}`;
   const maxVal = defaultVal;
 
+  // ★ タイムスタンプでユニークIDを生成（2件目以降もIDが重複しない）
+  const uid = Date.now();
+  const areaId  = 'dt-area-'  + uid;
+  const inputId = 'dt-input-' + uid;
+  const btnId   = 'dt-btn-'   + uid;
+
   const chat = document.getElementById('chat-body');
   chat.insertAdjacentHTML('beforeend', `
-    <div class="datetime-area" id="datetime-area">
+    <div class="datetime-area" id="${areaId}">
       <div class="datetime-label">食事した日時を選んでください（必須）</div>
-      <input type="datetime-local" class="datetime-input" id="meal-time-input"
-        value="${defaultVal}" max="${maxVal}"
-        onchange="onDatetimeChange(this)">
-      <button class="datetime-confirm-btn active" id="dt-confirm-btn"
-        onclick="confirmDatetime()">この時刻で決定 →</button>
+      <div class="datetime-input-row">
+        <input type="datetime-local" class="datetime-input" id="${inputId}"
+          value="${defaultVal}" max="${maxVal}"
+          onchange="onDatetimeChange('${btnId}', this)">
+        <button class="datetime-cal-btn"
+          onclick="openDatetimePicker('${inputId}')"
+          title="カレンダーを開く">📅</button>
+      </div>
+      <button class="datetime-confirm-btn active" id="${btnId}"
+        onclick="confirmDatetime('${areaId}', '${inputId}')">この時刻で決定 →</button>
     </div>
   `);
   scrollBottom();
 }
 
-function onDatetimeChange(el) {
-  const btn = document.getElementById('dt-confirm-btn');
-  btn.classList.toggle('active', !!el.value);
+// ★ カレンダーボタン用：ネイティブの日時ピッカーを開く
+function openDatetimePicker(inputId) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  if (el.showPicker) {
+    try { el.showPicker(); } catch(e) { el.focus(); }
+  } else {
+    el.focus();
+  }
 }
 
-// ===== ステップ3: meal_time確定 → place選択 =====
-async function confirmDatetime() {
-  const input = document.getElementById('meal-time-input');
-  if (!input.value) return;
+// ★ 引数にbtnIdを追加（どのボタンを有効化するか明確に）
+function onDatetimeChange(btnId, el) {
+  const btn = document.getElementById(btnId);
+  if (btn) btn.classList.toggle('active', !!el.value);
+}
+
+// ===== ステップ3: meal_time確定 → meal_type選択 =====
+// ★ areaId, inputId を引数で受け取る（getElementById重複問題を解消）
+async function confirmDatetime(areaId, inputId) {
+  const input = document.getElementById(inputId);
+  if (!input || !input.value) return;
 
   const dt = new Date(input.value);
   currentRecord.meal_time = input.value;
 
-  // meal_typeを時刻から推定（選択肢として提示）
-  const h = dt.getHours();
-  const suggestedType = h >= 5 && h < 10 ? '朝食' : h >= 10 && h < 14 ? '昼食' : h >= 14 && h < 17 ? '間食' : h >= 17 && h < 21 ? '夕食' : '夜食';
+  const area = document.getElementById(areaId);
+  if (area) disableChips(area);
 
-  disableChips(document.getElementById('datetime-area'));
+  const h = dt.getHours();
+  const suggestedType = h >= 5 && h < 10 ? '朝食'
+    : h >= 10 && h < 14 ? '昼食'
+    : h >= 14 && h < 17 ? '間食'
+    : h >= 17 && h < 21 ? '夕食' : '夜食';
+
   const m = dt.getMonth()+1, d = dt.getDate(), hh = dt.getHours(), mm = dt.getMinutes().toString().padStart(2,'0');
   addUserMsg(`${m}/${d} ${hh}:${mm}`);
 
@@ -1112,6 +1093,7 @@ async function confirmDatetime() {
   await sleep(300);
   showMealTypeChips(suggestedType);
 }
+// =====================================================================
 
 function showMealTypeChips(suggested) {
   const types = ['朝食', '昼食', '夕食', '間食', '夜食'];
@@ -1189,9 +1171,9 @@ async function selectEmotionCategory(label, debq, btn) {
       ? 'どんな気持ちから食べた？😌'
       : label === '👀 目や鼻につられて'
         ? 'どんなきっかけで食べた？👀'
-        :label === '🎉 楽しく・美味しく'
-         ? 'どんな良いことがあった？'
-         : 'どんなふうに量やカロリーを気にしていた？🥗'
+        : label === '🎉 楽しく・美味しく'
+          ? 'どんな良いことがあった？'
+          : 'どんなふうに量やカロリーを気にしていた？🥗'
   );
   await sleep(300);
   showEmotionDetailChips(label);
@@ -1212,19 +1194,20 @@ function showEmotionDetailChips(categoryLabel) {
           { label: '周りが食べてたから', debq: 'External' },
           { label: '時間だったから', debq: 'External' },
           { label: '残したくなかった', debq: 'External' }
-        ]: categoryLabel === '🎉 楽しく・美味しく'
-      ? [
-          { label: '家族・友人と一緒で', debq: 'Positive_social' },
-          { label: '美味しくて満足した', debq: 'Positive_taste' },
-          { label: '気分が良くて', debq: 'Positive_mood' },
-          { label: 'ご褒美として', debq: 'Positive_reward' }
         ]
-      : [
-          { label: 'ダイエット中だから少なめにした', debq: 'CR' },
-          { label: 'カロリーが気になって選んだ', debq: 'CR' },
-          { label: '食べすぎないよう意識した', debq: 'CR' },
-          { label: '我慢したけど食べてしまった', debq: 'CR_disinhibition' }
-        ];
+      : categoryLabel === '🎉 楽しく・美味しく'
+        ? [
+            { label: '家族・友人と一緒で', debq: 'Positive_social' },
+            { label: '美味しくて満足した', debq: 'Positive_taste' },
+            { label: '気分が良くて', debq: 'Positive_mood' },
+            { label: 'ご褒美として', debq: 'Positive_reward' }
+          ]
+        : [
+            { label: 'ダイエット中だから少なめにした', debq: 'CR' },
+            { label: 'カロリーが気になって選んだ', debq: 'CR' },
+            { label: '食べすぎないよう意識した', debq: 'CR' },
+            { label: '我慢したけど食べてしまった', debq: 'CR_disinhibition' }
+          ];
 
   const chips = details.map(detail => `
     <button class="chip" onclick="selectEmotionDetail('${detail.label}', '${detail.debq}', this)">${detail.label}</button>
@@ -1251,11 +1234,11 @@ async function selectEmotionFinal(label, debq) {
   await sleep(900);
   removeTyping(tyId);
 
-  // 記録完了
   saveBronze(currentRecord);
   showCompleteCard(currentRecord);
   addAiBubble('記録したよ！また気軽に話しかけてね😊');
 
+  // ★ リセット：次の記録を受け付けられるよう状態をクリア
   flowState = 'idle';
   currentRecord = {};
 }
@@ -1290,7 +1273,6 @@ function saveBronze(rec) {
   localStorage.setItem(BRONZE_COUNT_STORAGE_KEY, String(count + 1));
   console.log('[Bronze] 保存:', full);
 
-  // Logic Apps へ DB保存POST（fire-and-forget）
   const payload = {
     patient_id:         rec.patient_id         || 'unknown',
     meal_time:          rec.meal_time           || null,
@@ -1536,7 +1518,6 @@ window.addEventListener('load', () => {
 
   applySelectedCharacter();
   const onboardingDone = localStorage.getItem(ONBOARDING_DONE_STORAGE_KEY);
-  console.log(localStorage.getItem('onboarding_done'));
   if (onboardingDone === 'true') {
     startNormalGreeting();
   } else {
